@@ -1,0 +1,21 @@
+#!/bin/bash
+#PBS -P ob80
+#PBS -q normal
+#PBS -l ncpus=1
+#PBS -l mem=4GB
+#PBS -l walltime=8:00:00
+#PBS -l wd
+#PBS -l other=hyperthread
+#PBS -l storage=scratch/ob80+gdata/ob80
+#PBS -N sizes
+
+set -euo pipefail
+trap 's=$?; echo "$0: Error on line "$LINENO": $BASH_COMMAND"; exit $s' ERR
+
+DATE=`date +%Y%m%d`
+du --one-file-system --no-dereference --human-readable --summarize * > sizes_$DATE.txt &
+
+du  --human-readable --summarize --inodes --one-file-system * | sort -nr > inodes_$DATE.count &                                                                                              
+
+wait
+
