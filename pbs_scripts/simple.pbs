@@ -1,0 +1,23 @@
+#!/bin/bash
+#PBS -P ob80
+#PBS -q normal
+#PBS -l ncpus=1
+#PBS -l mem=4GB
+#PBS -l walltime=2:00:00
+#PBS -l wd
+#PBS -l other=hyperthread
+#PBS -l storage=scratch/ob80+gdata/ob80
+#PBS -N simple
+
+
+set -euo pipefail
+eval "$(conda shell.bash hook)"
+conda activate bioinformatics
+
+# if you want to write to a temp filesystem, add this line
+# #PBS -l jobfs=1GB
+# and then use $PBS_JOBFS
+
+
+ls -l
+
