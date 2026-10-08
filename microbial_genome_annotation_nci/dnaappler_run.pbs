@@ -1,0 +1,68 @@
+#!/bin/bash
+#PBS -P ob80
+#PBS -q normal
+#PBS -N dnaappler
+#PBS -l walltime=1:00:00
+#PBS -l ncpus=4
+#PBS -l mem=16GB
+#PBS -l jobfs=10GB
+#PBS -l wd
+#PBS -l storage=gdata/ob80+scratch/ob80
+#PBS -j oe
+
+# Reorient an assembly with dnaapler so each replicon starts at a sensible place.
+#
+#   qsub -o logs/AB5075_dnaappler.log -v INPUT=AB5075_consensus_assembly.fasta,OUTDIR=AB5075_dnaappler dnaappler_run.pbs
+#
+# INPUT   contigs (fasta)
+# OUTDIR  output directory
+# PREFIX  optional output file prefix (dnaapler default: dnaapler)
+# CONTIG_PREFIX  optional: prefix every contig name with this and an underscore
+#         first (README step 1c), e.g. CONTIG_PREFIX=AB5075 turns >1 into
+#         >AB5075_1. This lets autocycler -> dnaapler be chained with
+#         -W depend=afterok without a login-node renaming step. The renamed
+#         copy is written to OUTDIR/<CONTIG_PREFIX>_consensus_assembly.fasta.
+#
+# The same arguments can be given positionally when running the script with bash.
+
+set -euo pipefail
+trap 's=$?; echo "$0: Error on line "$LINENO": $BASH_COMMAND"; exit $s' ERR
+
+input=${INPUT:-${1:-}}
+output=${OUTDIR:-${2:-}}
+prefix=${PREFIX:-${3:-}}
+
+if [[ -z "$input" || -z "$output" ]]; then
+	echo "qsub -v INPUT=<contigs file>,OUTDIR=<output directory>[,PREFIX=<prefix>] $0" >&2;
+	exit 1
+fi
+if [[ ! -s "$input" ]]; then
+	echo "Error: Input file '$input' does not exist or is empty." >&2
+	exit 1
+fi
+
+CONDA_ENVS=${CONDA_ENVS:-/g/data/$PROJECT/$USER/conda}
+CONDAENV=dnaapler
+eval "$(conda shell.bash hook)"
+conda activate $CONDA_ENVS/$CONDAENV
+
+dnaapler --version
+
+# renamed copy goes on jobfs, because dnaapler wants to create OUTDIR itself
+renamed=""
+if [[ -n "${CONTIG_PREFIX:-}" ]]; then
+	renamed="${PBS_JOBFS:-${TMPDIR:-/tmp}}/${CONTIG_PREFIX}_consensus_assembly.fasta"
+	PREFIX_FOR_PERL="$CONTIG_PREFIX" perl -pe 's/^>/>$ENV{PREFIX_FOR_PERL}_/' "$input" > "$renamed"
+	grep '>' "$renamed"
+	input="$renamed"
+fi
+
+if [[ -n "$prefix" ]]; then
+	dnaapler all -i "$input" -o "$output" -p "$prefix" -t ${PBS_NCPUS:-1}
+else
+	dnaapler all -i "$input" -o "$output" -t ${PBS_NCPUS:-1}
+fi
+
+if [[ -n "$renamed" ]]; then
+	/bin/cp "$renamed" "$output/"
+fi

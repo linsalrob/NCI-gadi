@@ -1,0 +1,44 @@
+#!/bin/bash
+#PBS -P ob80
+#PBS -q copyq
+#PBS -N dnaappler_install
+#PBS -l walltime=2:00:00
+#PBS -l ncpus=1
+#PBS -l mem=16GB
+#PBS -l jobfs=10GB
+#PBS -l wd
+#PBS -l storage=gdata/ob80+scratch/ob80
+#PBS -j oe
+
+# Creates a separate dnaapler environment, which is where dnaappler_run.pbs
+# looks for it. dnaapler needs no separate database.
+#
+# It is not added to microbial_annotations: plassembler already pulls dnaapler
+# into that environment, but only 0.8.1, and dnaapler >=1.4 cannot be solved
+# alongside the rest of it (pysam/openssl conflict, 2026-10-06).
+#
+# qsub -o logs/dnaappler_install.log dnaappler_install.pbs
+#
+# Optional variables (qsub -v NAME=value):
+#   CONDA_ENVS  where conda environments live (default /g/data/$PROJECT/$USER/conda)
+
+set -euo pipefail
+trap 's=$?; echo "$0: Error on line "$LINENO": $BASH_COMMAND"; exit $s' ERR
+
+CONDA_ENVS=${CONDA_ENVS:-/g/data/$PROJECT/$USER/conda}
+CONDAENV=dnaapler
+ENV_DIR="$CONDA_ENVS/$CONDAENV"
+
+eval "$(conda shell.bash hook)"
+export CONDA_PKGS_DIRS="$PBS_JOBFS/pkgs"
+
+if [[ -e "$ENV_DIR" ]]; then
+	echo -e "Conda environment $ENV_DIR already exists, removing it first\n"
+	mamba env remove --yes --prefix "$ENV_DIR" || /bin/rm -rf -- "$ENV_DIR"
+fi
+
+mamba create --yes --prefix "$ENV_DIR" -c conda-forge -c bioconda 'dnaapler>=1.4'
+
+conda activate "$ENV_DIR"
+dnaapler --version
+echo -e "dnaapler installed in $ENV_DIR\n\nconda activate $ENV_DIR"

@@ -1,0 +1,51 @@
+#!/bin/bash
+#PBS -P ob80
+#PBS -q copyq
+#PBS -N phispy_install
+#PBS -l walltime=2:00:00
+#PBS -l ncpus=1
+#PBS -l mem=16GB
+#PBS -l jobfs=10GB
+#PBS -l wd
+#PBS -l storage=gdata/ob80+scratch/ob80
+#PBS -j oe
+
+# PhiSpy, for identifying prophages in annotated bacterial genomes.
+# https://github.com/linsalrob/PhiSpy
+#
+# Installed into its own environment rather than into microbial_annotations, so
+# that adding it cannot disturb a working assembly and annotation install.
+#
+# The environment is called phispy5, not phispy: an older, separately managed
+# phispy environment (PhiSpy 4.2.21) already exists in the default CONDA_ENVS,
+# and this script removes and recreates its target.
+#
+# qsub -o logs/phispy_install.log phispy_install.pbs
+#
+# Optional variables (qsub -v NAME=value):
+#   CONDA_ENVS  where conda environments live (default /g/data/$PROJECT/$USER/conda)
+#   CONDAENV    environment name (default phispy5)
+
+set -euo pipefail
+trap 's=$?; echo "$0: Error on line "$LINENO": $BASH_COMMAND"; exit $s' ERR
+
+CONDA_ENVS=${CONDA_ENVS:-/g/data/$PROJECT/$USER/conda}
+CONDAENV=${CONDAENV:-phispy5}
+ENV_DIR="$CONDA_ENVS/$CONDAENV"
+
+eval "$(conda shell.bash hook)"
+export CONDA_PKGS_DIRS="$PBS_JOBFS/pkgs"
+
+if [[ -e "$ENV_DIR" || -L "$ENV_DIR" ]]; then
+	echo "Removing existing $ENV_DIR"
+	mamba env remove --yes --prefix "$ENV_DIR" || /bin/rm -rf -- "$ENV_DIR"
+	/bin/rm -rf -- "$ENV_DIR"
+fi
+
+mamba create --yes --prefix "$ENV_DIR" -c conda-forge -c bioconda 'phispy>=5'
+
+conda activate "$ENV_DIR"
+PhiSpy.py --version
+echo "PhiSpy installed in $ENV_DIR"
+echo "training sets available:"
+PhiSpy.py --list short 2>&1 | head -20 || true

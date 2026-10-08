@@ -1,0 +1,80 @@
+#!/bin/bash
+#PBS -P ob80
+#PBS -q copyq
+#PBS -N padloc_install
+#PBS -l walltime=4:00:00
+#PBS -l ncpus=1
+#PBS -l mem=16GB
+#PBS -l jobfs=20GB
+#PBS -l wd
+#PBS -l storage=gdata/ob80+scratch/ob80
+#PBS -j oe
+
+# PADLOC, for identifying antiviral defence systems in annotated genomes.
+# https://github.com/padlocbio/padloc
+#
+# Installed into its own environment so that adding it cannot disturb a working
+# assembly and annotation install. The HMM and system database is downloaded
+# into /g/data/$PROJECT/$USER/databases/padloc rather than into the conda
+# package directory, so that rebuilding the environment does not mean
+# re-downloading the database.
+#
+# Runs on copyq because compute nodes have no internet access.
+#
+# qsub -o logs/padloc_install.log padloc_install.pbs
+#
+# Optional variables (qsub -v NAME=value):
+#   CONDA_ENVS  where conda environments live (default /g/data/$PROJECT/$USER/conda)
+#   CONDAENV    environment name (default padloc)
+#   DB_DIR      database directory (default /g/data/$PROJECT/$USER/databases/padloc)
+
+set -euo pipefail
+trap 's=$?; echo "$0: Error on line "$LINENO": $BASH_COMMAND"; exit $s' ERR
+
+CONDA_ENVS=${CONDA_ENVS:-/g/data/$PROJECT/$USER/conda}
+CONDAENV=${CONDAENV:-padloc}
+ENV_DIR="$CONDA_ENVS/$CONDAENV"
+DB_DIR=${DB_DIR:-/g/data/$PROJECT/$USER/databases/padloc}
+
+eval "$(conda shell.bash hook)"
+export CONDA_PKGS_DIRS="$PBS_JOBFS/pkgs"
+
+if [[ -e "$ENV_DIR" || -L "$ENV_DIR" ]]; then
+	echo "Removing existing $ENV_DIR"
+	mamba env remove --yes --prefix "$ENV_DIR" || /bin/rm -rf -- "$ENV_DIR"
+	/bin/rm -rf -- "$ENV_DIR"
+fi
+
+mamba create --yes --prefix "$ENV_DIR" -c conda-forge -c bioconda -c padlocbio padloc
+
+conda activate "$ENV_DIR"
+padloc --version
+
+# PADLOC parses its options one at a time and acts on the first it recognises,
+# so --data has to come BEFORE --db-update or it is ignored and the database
+# lands in the conda environment instead. This is padlocbio/padloc#31, closed
+# but still present in v2.0.0. Order matters here; do not rearrange.
+echo "Downloading the PADLOC database into $DB_DIR"
+mkdir -p "$DB_DIR"
+padloc --data "$DB_DIR" --db-update
+
+# Guard in case the ordering behaviour changes again: if the database still
+# landed inside the environment, move it and symlink back. padloc runs
+# `mkdir -p <env>/data` on every invocation, so that directory always exists;
+# test for the compiled HMM database, not the directory, or this would replace
+# a good database with an empty one.
+PKG_DATA="$ENV_DIR/data"
+if [[ ! -s "$DB_DIR/hmm/padlocdb.hmm" && -s "$PKG_DATA/hmm/padlocdb.hmm" && ! -L "$PKG_DATA" ]]; then
+	echo "Database landed in $PKG_DATA despite --data; relocating" >&2
+	/bin/rm -rf -- "$DB_DIR"
+	mv "$PKG_DATA" "$DB_DIR"
+	ln -s "$DB_DIR" "$PKG_DATA"
+fi
+
+[[ -s "$DB_DIR/hmm/padlocdb.hmm" ]] || { echo "Error: $DB_DIR/hmm/padlocdb.hmm missing after install" >&2; exit 1; }
+padloc --data "$DB_DIR" --db-version
+
+echo "=== database contents ==="
+ls "$DB_DIR" | head
+du -sh "$DB_DIR"
+echo "PADLOC installed in $ENV_DIR, database in $DB_DIR"

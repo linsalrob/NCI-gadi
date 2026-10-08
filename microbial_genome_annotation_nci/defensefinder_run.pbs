@@ -1,0 +1,79 @@
+#!/bin/bash
+#PBS -P ob80
+#PBS -q normal
+#PBS -N defensefinder
+#PBS -l walltime=2:00:00
+#PBS -l ncpus=8
+#PBS -l mem=16GB
+#PBS -l jobfs=10GB
+#PBS -l wd
+#PBS -l storage=gdata/ob80+scratch/ob80
+#PBS -j oe
+
+# Identify antiviral defence systems with DefenseFinder.
+# https://github.com/mdmparis/defense-finder
+#
+# Input is a protein FASTA; bakta's .faa is the right file. --preserve-raw is
+# passed so the underlying MacSyFinder output is kept, since the summary tables
+# alone do not say which protein matched which model.
+#
+# DefenseFinder needs to know gene order to call multi-gene systems. It infers
+# that from the order of records in the FASTA, so the .faa must not be sorted
+# or shuffled -- bakta writes it in coordinate order, which is what is wanted.
+#
+#   qsub -o logs/AB5075_defensefinder.log -v INPUT=AB5075_bakta/dnaapler_reoriented.faa,OUTDIR=AB5075_defensefinder defensefinder_run.pbs
+#
+# INPUT   protein FASTA (bakta .faa)
+# OUTDIR  output directory
+#
+# Optional variables:
+#   CONDA_ENVS  where conda environments live (default /g/data/$PROJECT/$USER/conda)
+#   CONDAENV    environment name (default defensefinder)
+#   DB_DIR      models directory (default /g/data/$PROJECT/$USER/databases/defensefinder)
+#
+# The same arguments can be given positionally when running the script with bash.
+
+set -euo pipefail
+trap 's=$?; echo "$0: Error on line "$LINENO": $BASH_COMMAND"; exit $s' ERR
+
+FAA=${INPUT:-${1:-}}
+OUT=${OUTDIR:-${2:-}}
+
+if [[ -z "$FAA" || -z "$OUT" ]]; then
+	echo "qsub -v INPUT=<protein fasta>,OUTDIR=<output directory> $0" >&2
+	exit 2
+fi
+[[ -s "$FAA" ]] || { echo "Error: '$FAA' missing or empty" >&2; exit 1; }
+
+CONDA_ENVS=${CONDA_ENVS:-/g/data/$PROJECT/$USER/conda}
+CONDAENV=${CONDAENV:-defensefinder}
+DB_DIR=${DB_DIR:-/g/data/$PROJECT/$USER/databases/defensefinder}
+eval "$(conda shell.bash hook)"
+conda activate $CONDA_ENVS/$CONDAENV
+python -m pip show mdmparis-defense-finder | grep -E "^Version"
+
+[[ -d "$DB_DIR" ]] || { echo "Error: models missing at $DB_DIR; run defensefinder_install.pbs" >&2; exit 1; }
+
+# DefenseFinder writes its index and raw MacSyFinder output in many small
+# files; work on jobfs and copy the result out
+WORK=$(mktemp -dp "${PBS_JOBFS:-/scratch/$PROJECT/$USER}")
+/bin/cp "$FAA" "$WORK/"
+
+defense-finder run \
+	--models-dir "$DB_DIR" \
+	--out-dir "$WORK/out" \
+	--workers "${PBS_NCPUS:-1}" \
+	--preserve-raw \
+	"$WORK/$(basename "$FAA")"
+
+mkdir -p "$OUT"
+rsync -a "$WORK/out"/ "$OUT"/
+/bin/rm -rf "$WORK"
+
+echo "=== defence systems found ==="
+sys=$(ls "$OUT"/*defense_finder_systems.tsv 2>/dev/null | head -1 || true)
+if [[ -s "$sys" ]]; then
+	awk -F'\t' 'NR>1{print $2}' "$sys" | sort | uniq -c | sort -rn
+else
+	echo "none"
+fi

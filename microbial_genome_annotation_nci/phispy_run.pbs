@@ -1,0 +1,88 @@
+#!/bin/bash
+#PBS -P ob80
+#PBS -q normal
+#PBS -N phispy
+#PBS -l walltime=4:00:00
+#PBS -l ncpus=16
+#PBS -l mem=32GB
+#PBS -l jobfs=10GB
+#PBS -l wd
+#PBS -l storage=gdata/ob80+scratch/ob80
+#PBS -j oe
+
+# Identify prophages in an annotated genome with PhiSpy.
+# https://github.com/linsalrob/PhiSpy
+#
+# Input is a GenBank file carrying gene calls -- the .gbff that bakta writes is
+# exactly right. PhiSpy needs the annotation, not just the sequence, so run
+# this after bakta rather than on an assembly.
+#
+# TRAIN selects a training set. PhiSpy ships ~140 of them and recommends the
+# most closely related one; `PhiSpy.py --list short` lists them. The default
+# generic set is built from 48 genomes and is the right choice when nothing
+# close is available, and the right choice when results must be comparable
+# across genomes of different species. Passing an organism-specific set
+# generally improves sensitivity for that organism at the cost of that
+# comparability, so it is worth running both and reporting the difference.
+#
+#   qsub -o logs/AB5075_phispy.log -v INPUT=AB5075_bakta/dnaapler_reoriented.gbff,OUTDIR=AB5075_phispy phispy_run.pbs
+#
+# INPUT   GenBank file with gene calls (bakta .gbff)
+# OUTDIR  output directory
+# TRAIN   optional training set, e.g. data/trainSet_Saureus.txt
+#
+# Optional variables:
+#   CONDA_ENVS  where conda environments live (default /g/data/$PROJECT/$USER/conda)
+#   CONDAENV    environment name (default phispy5, from phispy_install.pbs)
+#
+# The same arguments can be given positionally when running the script with bash.
+
+set -euo pipefail
+trap 's=$?; echo "$0: Error on line "$LINENO": $BASH_COMMAND"; exit $s' ERR
+
+GBK=${INPUT:-${1:-}}
+OUT=${OUTDIR:-${2:-}}
+TRAIN=${TRAIN:-${3:-}}
+
+if [[ -z "$GBK" || -z "$OUT" ]]; then
+	echo "qsub -v INPUT=<genbank file>,OUTDIR=<output directory>[,TRAIN=<training set>] $0" >&2
+	echo >&2
+	echo "  training set: e.g. data/trainSet_Saureus.txt" >&2
+	echo "                see 'PhiSpy.py --list short'" >&2
+	exit 2
+fi
+
+[[ -s "$GBK" ]] || { echo "Error: '$GBK' does not exist or is empty" >&2; exit 1; }
+
+CONDA_ENVS=${CONDA_ENVS:-/g/data/$PROJECT/$USER/conda}
+CONDAENV=${CONDAENV:-phispy5}
+eval "$(conda shell.bash hook)"
+conda activate $CONDA_ENVS/$CONDAENV
+PhiSpy.py --version
+
+train_args=()
+if [[ -n "$TRAIN" ]]; then
+	train_args=(--training_set "$TRAIN")
+	echo "Using training set $TRAIN" >&2
+else
+	echo "Using PhiSpy's default generic training set" >&2
+fi
+
+mkdir -p "$OUT"
+
+# output_choice is a bitmask; 512 writes everything, which is cheap here and
+# saves rerunning when a downstream question needs a format that was skipped.
+PhiSpy.py "$GBK" \
+	--output_dir "$OUT" \
+	--threads "${PBS_NCPUS:-2}" \
+	--output_choice 512 \
+	--include_all_repeats \
+	"${train_args[@]}"
+
+echo "=== prophages found ==="
+if [[ -s "$OUT/prophage_coordinates.tsv" ]]; then
+	wc -l < "$OUT/prophage_coordinates.tsv" | xargs echo "regions:"
+	cat "$OUT/prophage_coordinates.tsv"
+else
+	echo "none"
+fi

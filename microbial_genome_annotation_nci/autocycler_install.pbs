@@ -1,0 +1,65 @@
+#!/bin/bash
+#PBS -P ob80
+#PBS -q copyq
+#PBS -N autocycler_install
+#PBS -l walltime=4:00:00
+#PBS -l ncpus=1
+#PBS -l mem=32GB
+#PBS -l jobfs=20GB
+#PBS -l wd
+#PBS -l storage=gdata/ob80+scratch/ob80
+#PBS -j oe
+
+# Creates the microbial_annotations conda environment from autocycler.yaml and
+# installs the plassembler (PLSDB) database inside it, where autocycler_run.pbs
+# and plassembler_run.pbs expect to find it.
+#
+# Runs on copyq because compute nodes have no internet access. copyq allows a
+# single CPU and at most 10 hours.
+#
+# qsub -o autocycler_install.log autocycler_install.pbs
+#
+# Optional variables (qsub -v NAME=value):
+#   CONDA_ENVS  where conda environments live (default /g/data/$PROJECT/$USER/conda)
+#   YAML        the environment definition (default autocycler.yaml beside this
+#               script in the repository checkout)
+
+set -euo pipefail
+trap 's=$?; echo "$0: Error on line "$LINENO": $BASH_COMMAND"; exit $s' ERR
+
+CONDA_ENVS=${CONDA_ENVS:-/g/data/$PROJECT/$USER/conda}
+YAML=${YAML:-$HOME/GitHubs/NCI-gadi/microbial_genome_annotation_nci/autocycler.yaml}
+CONDAENV=microbial_annotations
+ENV_DIR="$CONDA_ENVS/$CONDAENV"
+
+if [[ ! -s "$YAML" ]]; then
+	echo "Error: environment file '$YAML' not found. Set YAML with qsub -v" >&2
+	exit 1
+fi
+
+# mamba 1.x on Gadi has no `mamba shell hook`; use conda's hook for activate
+eval "$(conda shell.bash hook)"
+
+# keep package downloads off the inode-limited /g/data and /scratch quotas
+export CONDA_PKGS_DIRS="$PBS_JOBFS/pkgs"
+
+if [[ -e "$ENV_DIR" ]]; then
+	echo -e "Conda environment $ENV_DIR already exists, removing it first\n"
+	mamba env remove --yes --prefix "$ENV_DIR" || /bin/rm -rf -- "$ENV_DIR"
+fi
+
+mamba env create --prefix "$ENV_DIR" -f "$YAML"
+echo -e "autocycler installed in $ENV_DIR\n\nconda activate $ENV_DIR"
+
+conda activate "$ENV_DIR"
+export PLASSEMBLER_DB=$CONDA_PREFIX/plassembler/
+echo "Installing the databases into $PLASSEMBLER_DB"
+/bin/rm -rf "$PLASSEMBLER_DB"
+plassembler download -d "$PLASSEMBLER_DB"
+
+echo "=== installed versions ==="
+for x in autocycler flye canu raven myloasm miniasm minipolish metaMDBG necat nextDenovo plassembler racon minimap2 parallel; do
+	printf '%-12s ' "$x"; command -v "$x" >/dev/null && echo OK || echo MISSING
+done
+conda list --prefix "$ENV_DIR" | grep -E '^(autocycler|canu|flye|metamdbg|miniasm|minimap2|minipolish|myloasm|necat|nextdenovo|nextpolish|plassembler|racon|raven-assembler|wtdbg) '
+ls -la "$PLASSEMBLER_DB"

@@ -1,0 +1,76 @@
+#!/bin/bash
+#PBS -P ob80
+#PBS -q gpuvolta
+#PBS -N baktfold
+#PBS -l walltime=4:00:00
+#PBS -l ncpus=12
+#PBS -l ngpus=1
+#PBS -l mem=90GB
+#PBS -l jobfs=50GB
+#PBS -l wd
+#PBS -l storage=gdata/ob80+scratch/ob80
+#PBS -j oe
+
+# Improve the bakta annotation of hypothetical proteins with baktfold
+# (ProstT5 on the GPU, then Foldseek).
+#
+#   qsub -o logs/AB5075_baktfold.log -v INPUT=AB5075_bakta/dnaapler_reoriented.json,OUTDIR=AB5075_baktfold baktfold_run.pbs
+#
+# INPUT   bakta json file
+# OUTDIR  output directory
+#
+# Optional variables:
+#   CONDA_ENVS  where conda environments live (default /g/data/$PROJECT/$USER/conda)
+#   DB_DIR      database (default /g/data/$PROJECT/$USER/databases/baktfold_db)
+#
+# One V100 (12 CPUs, a quarter of a gpuvolta node). Pawsey used 8 GPUs, but
+# baktfold uses one. gpuvolta is charged at 3 SU per CPU-hour, so this costs
+# 36 SU per hour whether or not the GPU is busy.
+#
+# The same arguments can be given positionally when running the script with bash.
+
+set -euo pipefail
+trap 's=$?; echo "$0: Error on line "$LINENO": $BASH_COMMAND"; exit $s' ERR
+
+input=${INPUT:-${1:-}}
+output=${OUTDIR:-${2:-}}
+
+if [[ -z "$input" || -z "$output" ]]; then
+	echo "qsub -v INPUT=<bakta json file>,OUTDIR=<output directory> $0" >&2;
+	exit 1;
+fi
+if [[ ! -s "$input" ]]; then
+	echo "Error: Input file '$input' does not exist or is empty." >&2
+	exit 1
+fi
+
+CONDA_ENVS=${CONDA_ENVS:-/g/data/$PROJECT/$USER/conda}
+CONDAENV=baktfold
+eval "$(conda shell.bash hook)"
+conda activate $CONDA_ENVS/$CONDAENV
+
+DB_DIR=${DB_DIR:-/g/data/$PROJECT/$USER/databases/baktfold_db}
+if [[ ! -d "$DB_DIR" ]]; then
+	echo "Error: no baktfold database in $DB_DIR. Run baktfold_download.pbs first." >&2
+	exit 1
+fi
+
+# no internet here: fail at once if the model is not already in DB_DIR
+export HF_HUB_OFFLINE=1
+export TRANSFORMERS_OFFLINE=1
+export TMPDIR=${PBS_JOBFS:-${TMPDIR:-/tmp}}
+
+# Do not set CUDA_VISIBLE_DEVICES: PBS restricts the GPU with cgroups and leaves
+# it unset, and setting it by hand can hide the GPU this job was given.
+nvidia-smi --query-gpu=name,memory.total,driver_version --format=csv
+baktfold --version || true
+python - <<'PY'
+import sys, torch
+print("PyTorch:", torch.__version__, "CUDA:", torch.version.cuda)
+if not torch.cuda.is_available():
+    sys.exit("ERROR: PyTorch cannot see a GPU")
+print("GPU:", torch.cuda.get_device_name(0), "capability", torch.cuda.get_device_capability(0))
+print("Compiled for:", torch.cuda.get_arch_list())
+PY
+
+baktfold run -i "$input" -o "$output" -d "$DB_DIR" -f -t ${PBS_NCPUS:-1}

@@ -1,0 +1,67 @@
+#!/bin/bash
+#PBS -P ob80
+#PBS -q copyq
+#PBS -N defensefinder_install
+#PBS -l walltime=4:00:00
+#PBS -l ncpus=1
+#PBS -l mem=16GB
+#PBS -l jobfs=20GB
+#PBS -l wd
+#PBS -l storage=gdata/ob80+scratch/ob80
+#PBS -j oe
+
+# DefenseFinder, for identifying antiviral defence systems in annotated genomes.
+# https://github.com/mdmparis/defense-finder
+#
+# Installed into its own environment so that adding it cannot disturb a working
+# assembly and annotation install. The MacSyFinder models are downloaded into
+# /g/data/$PROJECT/$USER/databases/defensefinder rather than the default
+# location under $HOME, which on Gadi is only 10 GB.
+#
+# Runs on copyq because compute nodes have no internet access.
+#
+# qsub -o logs/defensefinder_install.log defensefinder_install.pbs
+#
+# Optional variables (qsub -v NAME=value):
+#   CONDA_ENVS  where conda environments live (default /g/data/$PROJECT/$USER/conda)
+#   CONDAENV    environment name (default defensefinder)
+#   DB_DIR      models directory (default /g/data/$PROJECT/$USER/databases/defensefinder)
+
+set -euo pipefail
+trap 's=$?; echo "$0: Error on line "$LINENO": $BASH_COMMAND"; exit $s' ERR
+
+CONDA_ENVS=${CONDA_ENVS:-/g/data/$PROJECT/$USER/conda}
+CONDAENV=${CONDAENV:-defensefinder}
+ENV_DIR="$CONDA_ENVS/$CONDAENV"
+DB_DIR=${DB_DIR:-/g/data/$PROJECT/$USER/databases/defensefinder}
+
+eval "$(conda shell.bash hook)"
+export CONDA_PKGS_DIRS="$PBS_JOBFS/pkgs"
+export PIP_CACHE_DIR="$PBS_JOBFS/pip"
+
+if [[ -e "$ENV_DIR" || -L "$ENV_DIR" ]]; then
+	echo "Removing existing $ENV_DIR"
+	mamba env remove --yes --prefix "$ENV_DIR" || /bin/rm -rf -- "$ENV_DIR"
+	/bin/rm -rf -- "$ENV_DIR"
+fi
+
+# hmmer comes from conda; defense-finder itself from PyPI. defense-finder pins
+# an exact macsyfinder (==2.1.4 in 3.0.0), so let pip supply it rather than
+# installing a conda macsyfinder that pip would then replace.
+mamba create --yes --prefix "$ENV_DIR" -c conda-forge -c bioconda \
+	python=3.11 hmmer pip
+
+conda activate "$ENV_DIR"
+python -m pip install --upgrade pip
+python -m pip install mdmparis-defense-finder
+
+python -m pip show mdmparis-defense-finder macsyfinder | grep -E '^(Name|Version)'
+
+mkdir -p "$DB_DIR"
+echo "Downloading DefenseFinder models into $DB_DIR"
+defense-finder update --models-dir "$DB_DIR"
+
+echo "=== models ==="
+ls "$DB_DIR" | head
+du -sh "$DB_DIR"
+echo "DefenseFinder installed in $ENV_DIR, models in $DB_DIR"

@@ -1,0 +1,58 @@
+#!/bin/bash
+#PBS -P ob80
+#PBS -q normal
+#PBS -N bakta
+#PBS -l walltime=6:00:00
+#PBS -l ncpus=16
+#PBS -l mem=64GB
+#PBS -l jobfs=50GB
+#PBS -l wd
+#PBS -l storage=gdata/ob80+scratch/ob80
+#PBS -j oe
+
+# Annotate an assembly with bakta.
+#
+#   qsub -o logs/AB5075_bakta.log -v INPUT=AB5075_dnaappler/dnaapler_reoriented.fasta,OUTDIR=AB5075_bakta bakta_run.pbs
+#
+# INPUT   assembly (fasta)
+# OUTDIR  output directory
+#
+# Optional variables:
+#   CONDA_ENVS  where conda environments live (default /g/data/$PROJECT/$USER/conda)
+#   BAKTA_DB    database (default /g/data/$PROJECT/$USER/databases/bakta/db)
+#
+# The same arguments can be given positionally when running the script with bash.
+
+set -euo pipefail
+trap 's=$?; echo "$0: Error on line "$LINENO": $BASH_COMMAND"; exit $s' ERR
+
+input=${INPUT:-${1:-}}
+output=${OUTDIR:-${2:-}}
+
+if [[ -z "$input" || -z "$output" ]]; then
+	echo "qsub -v INPUT=<input fasta file>,OUTDIR=<output directory> $0" >&2;
+	exit 1;
+fi
+if [[ ! -s "$input" ]]; then
+	echo "Error: Input file '$input' does not exist or is empty." >&2
+	exit 1
+fi
+
+CONDA_ENVS=${CONDA_ENVS:-/g/data/$PROJECT/$USER/conda}
+CONDAENV=microbial_annotations
+eval "$(conda shell.bash hook)"
+conda activate $CONDA_ENVS/$CONDAENV
+
+BAKTA_DB=${BAKTA_DB:-/g/data/$PROJECT/$USER/databases/bakta/db}
+if [[ ! -s "$BAKTA_DB/version.json" ]]; then
+	echo "Error: no bakta database in $BAKTA_DB. Run bakta_install.pbs first." >&2
+	exit 1
+fi
+bakta --version
+cat "$BAKTA_DB/version.json"
+
+# bakta defaults to a single thread, which is hours per genome. Derive the
+# thread count from the allocation, the same way autocycler_run.pbs does.
+bakta --keep-contig-headers --db $BAKTA_DB --threads ${PBS_NCPUS:-1} \
+	--tmp-dir "${PBS_JOBFS:-${TMPDIR:-/tmp}}" \
+	--output "$output" "$input"

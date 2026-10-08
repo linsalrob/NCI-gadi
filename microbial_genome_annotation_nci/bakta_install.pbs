@@ -1,0 +1,100 @@
+#!/bin/bash
+#PBS -P ob80
+#PBS -q copyq
+#PBS -N bakta_install
+#PBS -l walltime=10:00:00
+#PBS -l ncpus=1
+#PBS -l mem=32GB
+#PBS -l jobfs=10GB
+#PBS -l wd
+#PBS -l storage=gdata/ob80+scratch/ob80
+#PBS -j oe
+
+# Adds bakta to the microbial_annotations environment and installs the full
+# bakta database into $DB_ROOT/db, which is where bakta_run.pbs looks for it.
+# Create the environment first with autocycler_install.pbs.
+#
+# copyq is limited to 10 hours, and the database is tens of GB, so the download
+# is resumable: if the job hits walltime, resubmit it and wget continues where
+# it stopped. (This folds in the Pawsey bakta_db_resume.slurm, because
+# `bakta_db download` cannot resume.) The tarball is checked against the md5 in
+# bakta's official manifest before it is installed, and deleted afterwards
+# unless KEEP_TARBALL=1.
+#
+# qsub -o logs/bakta_install.log bakta_install.pbs
+#
+# Optional variables (qsub -v NAME=value):
+#   CONDA_ENVS    where conda environments live (default /g/data/$PROJECT/$USER/conda)
+#   DB_ROOT       database location (default /g/data/$PROJECT/$USER/databases/bakta)
+#   DB_RECORD     Zenodo record of the database (default 14916843, db v6.0, needs bakta >= 1.11)
+#   KEEP_TARBALL  set to 1 to keep db.tar.xz after installing it
+
+set -euo pipefail
+trap 's=$?; echo "$0: Error on line "$LINENO": $BASH_COMMAND"; exit $s' ERR
+
+CONDA_ENVS=${CONDA_ENVS:-/g/data/$PROJECT/$USER/conda}
+CONDAENV=microbial_annotations
+ENV_DIR="$CONDA_ENVS/$CONDAENV"
+DB_ROOT=${DB_ROOT:-/g/data/$PROJECT/$USER/databases/bakta}
+DB_RECORD=${DB_RECORD:-14916843}
+DB_TARBALL="$DB_ROOT/db.tar.xz"
+DB_URL="https://zenodo.org/record/${DB_RECORD}/files/db.tar.xz"
+VERSIONS_URL=https://raw.githubusercontent.com/oschwengers/bakta/main/db-versions.json
+
+if [[ ! -x "$ENV_DIR/bin/python" ]]; then
+	echo "Error: $ENV_DIR does not exist. Run autocycler_install.pbs first." >&2
+	exit 1
+fi
+
+eval "$(conda shell.bash hook)"
+export CONDA_PKGS_DIRS="$PBS_JOBFS/pkgs"
+
+if [[ ! -x "$ENV_DIR/bin/bakta" ]]; then
+	mamba install --yes --prefix "$ENV_DIR" 'bakta>=1.11'
+fi
+conda activate "$ENV_DIR"
+bakta --version
+
+if [[ -s "$DB_ROOT/db/version.json" ]]; then
+	echo "A bakta database is already installed in $DB_ROOT/db:"
+	cat "$DB_ROOT/db/version.json"
+	exit 0
+fi
+
+mkdir -p "$DB_ROOT"
+
+expected_md5=$(
+	python -c \
+		'import json, sys, urllib.request; versions=json.load(urllib.request.urlopen(sys.argv[1])); print(next(v["md5"] for v in versions if str(v["record"]) == sys.argv[2]))' \
+		"$VERSIONS_URL" "$DB_RECORD"
+)
+echo "Expecting md5 $expected_md5 for record $DB_RECORD"
+
+echo "Downloading the bakta database at $(date -Is)"
+echo "Existing bytes: $(stat -c %s "$DB_TARBALL" 2>/dev/null || echo 0)"
+# Zenodo drops long connections and answers 503 for a while afterwards
+# (2026-10-06: dropped at 94%, then 503 on the immediate retry), so keep
+# retrying with backoff rather than failing on the first error
+wget --continue --progress=dot:giga \
+	--tries=50 --waitretry=300 --read-timeout=300 --retry-connrefused \
+	--retry-on-http-error=429,500,502,503,504 \
+	--output-document="$DB_TARBALL" "$DB_URL"
+
+echo "Validating MD5 against the official bakta database manifest"
+actual_md5=$(md5sum "$DB_TARBALL" | awk '{print $1}')
+if [[ "$actual_md5" != "$expected_md5" ]]; then
+	echo "MD5 mismatch: expected $expected_md5, observed $actual_md5" >&2
+	echo "Delete $DB_TARBALL and resubmit." >&2
+	exit 1
+fi
+
+echo "Installing the bakta database at $(date -Is)"
+bakta_db install --db-file "$DB_TARBALL" --output "$DB_ROOT"
+test -s "$DB_ROOT/db/version.json"
+cat "$DB_ROOT/db/version.json"
+
+if [[ "${KEEP_TARBALL:-0}" != "1" ]]; then
+	/bin/rm -f "$DB_TARBALL"
+fi
+du -sh "$DB_ROOT/db"
+echo "bakta database installed at $(date -Is)"

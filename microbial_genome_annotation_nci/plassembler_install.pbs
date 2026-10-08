@@ -1,0 +1,59 @@
+#!/bin/bash
+#PBS -P ob80
+#PBS -q copyq
+#PBS -N plassembler_install
+#PBS -l walltime=4:00:00
+#PBS -l ncpus=1
+#PBS -l mem=32GB
+#PBS -l jobfs=20GB
+#PBS -l wd
+#PBS -l storage=gdata/ob80+scratch/ob80
+#PBS -j oe
+
+# plassembler is already listed in autocycler.yaml, so autocycler_install.pbs
+# installs it, and the PLSDB database, into the microbial_annotations
+# environment. This script is for the case where you only want plassembler, or
+# where the PLSDB database needs (re)installing.
+#
+# Runs on copyq because compute nodes have no internet access.
+#
+# qsub -o logs/plassembler_install.log plassembler_install.pbs
+#
+# Optional variables (qsub -v NAME=value):
+#   CONDA_ENVS  where conda environments live (default /g/data/$PROJECT/$USER/conda)
+#   YAML        the environment definition, used only if the environment is
+#               missing (default autocycler.yaml in the repository checkout)
+
+set -euo pipefail
+trap 's=$?; echo "$0: Error on line "$LINENO": $BASH_COMMAND"; exit $s' ERR
+
+CONDA_ENVS=${CONDA_ENVS:-/g/data/$PROJECT/$USER/conda}
+YAML=${YAML:-$HOME/GitHubs/NCI-gadi/microbial_genome_annotation_nci/autocycler.yaml}
+CONDAENV=microbial_annotations
+ENV_DIR="$CONDA_ENVS/$CONDAENV"
+
+eval "$(conda shell.bash hook)"
+export CONDA_PKGS_DIRS="$PBS_JOBFS/pkgs"
+
+if [[ ! -d "$ENV_DIR" ]]; then
+	echo "Environment $ENV_DIR does not exist; creating it from $YAML" >&2
+	mamba env create --prefix "$ENV_DIR" -f "$YAML"
+fi
+
+conda activate "$ENV_DIR"
+
+if ! command -v plassembler > /dev/null; then
+	echo "plassembler not found in $ENV_DIR, installing it" >&2
+	mamba install --yes --prefix "$ENV_DIR" -c conda-forge -c bioconda plassembler
+fi
+
+# same location that autocycler_run.pbs and plassembler_run.pbs expect
+export PLASSEMBLER_DB=$CONDA_PREFIX/plassembler/
+echo "Installing the PLSDB database into $PLASSEMBLER_DB"
+/bin/rm -rf "$PLASSEMBLER_DB"
+plassembler download -d "$PLASSEMBLER_DB"
+
+plassembler --version
+ls -la "$PLASSEMBLER_DB"
+echo "plassembler installed in $ENV_DIR"
+echo "conda activate $ENV_DIR"

@@ -1,0 +1,73 @@
+#!/bin/bash
+#PBS -P ob80
+#PBS -q copyq
+#PBS -N baktfold_install
+#PBS -l walltime=4:00:00
+#PBS -l ncpus=1
+#PBS -l mem=32GB
+#PBS -l jobfs=40GB
+#PBS -l wd
+#PBS -l storage=gdata/ob80+scratch/ob80
+#PBS -j oe
+
+# Creates the baktfold conda environment with a CUDA build of PyTorch.
+# Install the databases afterwards with baktfold_download.pbs.
+#
+# The Pawsey version built a pip virtualenv against ROCm for AMD GPUs. Gadi's
+# GPUs are NVIDIA, so this follows baktfold's own conda instructions
+# (bioconda baktfold + pytorch=*=cuda*), with two Gadi-specific changes:
+#
+#  - gpuvolta is V100 (compute capability 7.0, sm_70). CUDA 13 dropped Volta,
+#    so CUDA is pinned to 12.x and the job fails if PyTorch was not built for
+#    sm_70.
+#  - copyq has no GPU, so conda cannot detect CUDA and would only offer the CPU
+#    build. CONDA_OVERRIDE_CUDA tells the solver which CUDA to assume.
+#
+# qsub -o logs/baktfold_install.log baktfold_install.pbs
+#
+# Optional variables (qsub -v NAME=value):
+#   CONDA_ENVS    where conda environments live (default /g/data/$PROJECT/$USER/conda)
+#   CUDA_VERSION  CUDA to build against (default 12.6; must be 12.x for V100)
+
+set -euo pipefail
+trap 's=$?; echo "$0: Error on line "$LINENO": $BASH_COMMAND"; exit $s' ERR
+
+CONDA_ENVS=${CONDA_ENVS:-/g/data/$PROJECT/$USER/conda}
+CONDAENV=baktfold
+ENV_DIR="$CONDA_ENVS/$CONDAENV"
+CUDA_VERSION=${CUDA_VERSION:-12.6}
+
+eval "$(conda shell.bash hook)"
+export CONDA_PKGS_DIRS="$PBS_JOBFS/pkgs"
+export CONDA_OVERRIDE_CUDA=$CUDA_VERSION
+
+if [[ -e "$ENV_DIR" ]]; then
+	echo -e "Conda environment $ENV_DIR already exists, removing it first\n"
+	mamba env remove --yes --prefix "$ENV_DIR" || /bin/rm -rf -- "$ENV_DIR"
+fi
+
+mamba create --yes --prefix "$ENV_DIR" -c conda-forge -c bioconda \
+	baktfold 'pytorch=*=cuda*' "cuda-version=$CUDA_VERSION"
+
+conda activate "$ENV_DIR"
+
+echo "=== installed versions ==="
+conda list --prefix "$ENV_DIR" | grep -E '^(baktfold|pytorch|foldseek|cuda-version|transformers|python) '
+foldseek version
+
+# torch.cuda.get_arch_list() is empty without a GPU, so read the compiled
+# architecture flags directly
+python - <<'PY'
+import sys, torch
+print("PyTorch:", torch.__version__, "CUDA:", torch.version.cuda)
+if torch.version.cuda is None:
+    sys.exit("ERROR: this is a CPU-only PyTorch build")
+flags = torch._C._cuda_getArchFlags()
+print("Compiled for:", flags)
+if "sm_70" not in flags:
+    sys.exit("ERROR: PyTorch was not built for sm_70, so it will not run on the gpuvolta V100s")
+import baktfold
+print("baktfold imported from", baktfold.__file__)
+PY
+
+echo -e "baktfold installed in $ENV_DIR\n\nconda activate $ENV_DIR"

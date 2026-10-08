@@ -1,0 +1,120 @@
+#!/bin/bash
+#PBS -P ob80
+#PBS -q normal
+#PBS -N padloc
+#PBS -l walltime=2:00:00
+#PBS -l ncpus=8
+#PBS -l mem=16GB
+#PBS -l jobfs=10GB
+#PBS -l wd
+#PBS -l storage=gdata/ob80+scratch/ob80
+#PBS -j oe
+
+# Identify antiviral defence systems with PADLOC.
+# https://github.com/padlocbio/padloc
+#
+# PADLOC wants protein sequences and the matching feature coordinates, because
+# defence systems are called from gene content AND synteny -- the genes have to
+# be adjacent. Give it bakta's .faa together with bakta's .gff3; the pair must
+# come from the same annotation run or the coordinates will not match the
+# proteins.
+#
+# Passing a nucleotide FASTA instead (FNA=, no FAA/GFF) makes PADLOC call genes
+# itself with prodigal, which discards the bakta annotation and makes results
+# non-comparable with the rest of this pipeline. Prefer the .faa/.gff3 pair.
+#
+#   qsub -o logs/AB5075_padloc.log -v FAA=AB5075_bakta/dnaapler_reoriented.faa,GFF=AB5075_bakta/dnaapler_reoriented.gff3,OUTDIR=AB5075_padloc padloc_run.pbs
+#   qsub -o logs/AB5075_padloc.log -v FNA=AB5075_dnaappler/dnaapler_reoriented.fasta,OUTDIR=AB5075_padloc padloc_run.pbs
+#
+# FAA     protein FASTA (bakta .faa)
+# GFF     feature GFF3 from the same bakta run
+# FNA     nucleotide FASTA, the prodigal fallback, used only without FAA/GFF
+# OUTDIR  output directory
+#
+# Optional variables:
+#   CONDA_ENVS  where conda environments live (default /g/data/$PROJECT/$USER/conda)
+#   CONDAENV    environment name (default padloc)
+#   DB_DIR      database directory (default /g/data/$PROJECT/$USER/databases/padloc)
+
+set -euo pipefail
+trap 's=$?; echo "$0: Error on line "$LINENO": $BASH_COMMAND"; exit $s' ERR
+
+FAA=${FAA:-}
+GFF=${GFF:-}
+FNA=${FNA:-}
+OUT=${OUTDIR:-}
+
+CONDA_ENVS=${CONDA_ENVS:-/g/data/$PROJECT/$USER/conda}
+CONDAENV=${CONDAENV:-padloc}
+DB_DIR=${DB_DIR:-/g/data/$PROJECT/$USER/databases/padloc}
+
+usage() {
+	echo "qsub -v FAA=<faa>,GFF=<gff3>,OUTDIR=<output directory> $0" >&2
+	echo "qsub -v FNA=<fna>,OUTDIR=<output directory> $0          (prodigal fallback)" >&2
+	exit 2
+}
+[[ -n "$OUT" ]] || usage
+
+eval "$(conda shell.bash hook)"
+conda activate $CONDA_ENVS/$CONDAENV
+padloc --version
+
+[[ -s "$DB_DIR/hmm/padlocdb.hmm" ]] || { echo "Error: PADLOC database missing at $DB_DIR; run padloc_install.pbs" >&2; exit 1; }
+
+# padloc writes temporary files next to its output; keep them on jobfs
+WORK=$(mktemp -dp "${PBS_JOBFS:-/scratch/$PROJECT/$USER}")
+
+if [[ -n "$FAA" && -n "$GFF" ]]; then
+	[[ -s "$FAA" ]] || { echo "Error: '$FAA' missing or empty" >&2; exit 1; }
+	[[ -s "$GFF" ]] || { echo "Error: '$GFF' missing or empty" >&2; exit 1; }
+
+	# Two adjustments are needed before PADLOC will read a bakta GFF correctly.
+	#
+	# 1. bakta appends the genome sequence to the GFF after a '##FASTA' line.
+	#    PADLOC reads the GFF with comment="#", which drops that marker line but
+	#    not the sequence lines after it, so tens of thousands of sequence lines
+	#    are parsed as malformed feature rows. Harmless to the result but it is
+	#    the source of the parser warning, and it is wasted work.
+	#
+	# 2. PADLOC replaces a CDS's ID with its Name attribute whenever the CDS
+	#    carries a 'pseudo' attribute, because in RefSeq and GenBank GFFs Name
+	#    holds an identifier. bakta puts the PRODUCT DESCRIPTION in Name, so the
+	#    substitution turns a locus tag into something like
+	#    "DNA 3'-5' helicase", which then fails to match the protein in the .faa
+	#    and PADLOC aborts with "N protein sequence IDs are missing from GFF
+	#    file". It only triggers when a pseudogene happens to hit one of the
+	#    defence HMMs, so it appears sporadically across a set of genomes.
+	#
+	#    This is padlocbio/padloc#8, still open, with an upstream patch that
+	#    removes the substitution entirely. Dropping the 'pseudo' attribute
+	#    here achieves the same result without modifying the installed tool,
+	#    so the environment stays reproducible from the install script alone.
+	CLEAN_GFF="$WORK/$(basename "${GFF%.*}")_padloc_input.gff3"
+	sed '/^##FASTA/,$d' "$GFF" | sed 's/;pseudo=[^;]*//; s/pseudo=[^;]*;//' > "$CLEAN_GFF"
+	echo "Prepared GFF for PADLOC: $CLEAN_GFF" >&2
+	echo "  feature lines: $(grep -vc '^#' "$CLEAN_GFF")" >&2
+	echo "  pseudo attributes removed: $(grep -c 'pseudo=' "$GFF" || true) -> $(grep -c 'pseudo=' "$CLEAN_GFF" || true)" >&2
+
+	padloc --faa "$FAA" --gff "$CLEAN_GFF" --outdir "$WORK" \
+		--data "$DB_DIR" --cpu "${PBS_NCPUS:-1}"
+elif [[ -n "$FNA" ]]; then
+	[[ -s "$FNA" ]] || { echo "Error: '$FNA' missing or empty" >&2; exit 1; }
+	echo "No GFF given: PADLOC will call genes itself with prodigal." >&2
+	echo "Results will not be comparable with runs that used the bakta annotation." >&2
+	padloc --fna "$FNA" --outdir "$WORK" \
+		--data "$DB_DIR" --cpu "${PBS_NCPUS:-1}"
+else
+	usage
+fi
+
+mkdir -p "$OUT"
+rsync -a "$WORK"/ "$OUT"/
+/bin/rm -rf "$WORK"
+
+echo "=== defence systems found ==="
+csv=$(ls "$OUT"/*_padloc.csv 2>/dev/null | head -1 || true)
+if [[ -s "$csv" ]]; then
+	awk -F',' 'NR>1{print $3}' "$csv" | sort | uniq -c | sort -rn
+else
+	echo "none"
+fi

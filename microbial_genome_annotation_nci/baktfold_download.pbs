@@ -1,0 +1,48 @@
+#!/bin/bash
+#PBS -P ob80
+#PBS -q copyq
+#PBS -N baktfold_download
+#PBS -l walltime=10:00:00
+#PBS -l ncpus=1
+#PBS -l mem=32GB
+#PBS -l jobfs=10GB
+#PBS -l wd
+#PBS -l storage=gdata/ob80+scratch/ob80
+#PBS -j oe
+
+# Downloads the baktfold databases and the ProstT5 model into DB_DIR, which is
+# where baktfold_run.pbs looks for them. Run baktfold_install.pbs first.
+#
+# Compute nodes have no internet, so everything baktfold_run.pbs needs must be
+# in DB_DIR before it runs; the run job sets HF_HUB_OFFLINE=1 so a missing
+# model fails loudly instead of hanging.
+#
+# The Pawsey version also ran `baktfold install --foldseek-gpu`, which pads the
+# database for Foldseek-GPU. That is not done here: it is not yet established
+# that Foldseek-GPU runs on the V100s in gpuvolta, and the padded copy adds
+# storage. ProstT5 still uses the GPU without it.
+#
+# qsub -o logs/baktfold_download.log baktfold_download.pbs
+#
+# Optional variables (qsub -v NAME=value):
+#   CONDA_ENVS  where conda environments live (default /g/data/$PROJECT/$USER/conda)
+#   DB_DIR      database location (default /g/data/$PROJECT/$USER/databases/baktfold_db)
+
+set -euo pipefail
+trap 's=$?; echo "$0: Error on line "$LINENO": $BASH_COMMAND"; exit $s' ERR
+
+CONDA_ENVS=${CONDA_ENVS:-/g/data/$PROJECT/$USER/conda}
+CONDAENV=baktfold
+DB_DIR=${DB_DIR:-/g/data/$PROJECT/$USER/databases/baktfold_db}
+
+eval "$(conda shell.bash hook)"
+conda activate $CONDA_ENVS/$CONDAENV
+
+baktfold --version || true
+mkdir -p "$DB_DIR"
+
+# downloads are network-bound, not CPU-bound, so use more threads than CPUs
+baktfold install -d "$DB_DIR" -t 4
+
+du -sh "$DB_DIR"
+find "$DB_DIR" -maxdepth 2 | sort
