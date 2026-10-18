@@ -14,8 +14,18 @@
 # https://github.com/mdmparis/defense-finder
 #
 # Input is a protein FASTA; bakta's .faa is the right file. --preserve-raw is
-# passed so the underlying MacSyFinder output is kept, since the summary tables
-# alone do not say which protein matched which model.
+# passed so the MacSyFinder solution tables are kept, notably
+# rejected_candidates.tsv, which records systems that were considered and why
+# they were not called. Which protein matched which model is already in the
+# _genes.tsv and _hmmer.tsv summaries. The per-profile hmmer_results/ files
+# (~5,000 per genome, almost all without hits) are removed before copying out,
+# since they cost inodes and duplicate _hmmer.tsv.
+#
+# --skip-model-version-check: otherwise defense-finder asks GitHub for the
+# latest model version whenever ~/.defensefinder_model_lastversion is more than
+# 30 days old, and compute nodes have no network, so the run dies with
+# "Network is unreachable". The models in use are whatever is in DB_DIR
+# (pinned by defensefinder_install.pbs).
 #
 # DefenseFinder needs to know gene order to call multi-gene systems. It infers
 # that from the order of records in the FASTA, so the .faa must not be sorted
@@ -64,8 +74,10 @@ defense-finder run \
 	--out-dir "$WORK/out" \
 	--workers "${PBS_NCPUS:-1}" \
 	--preserve-raw \
+	--skip-model-version-check \
 	"$WORK/$(basename "$FAA")"
 
+/bin/rm -rf "$WORK"/out/defense-finder-tmp/*/hmmer_results
 mkdir -p "$OUT"
 rsync -a "$WORK/out"/ "$OUT"/
 /bin/rm -rf "$WORK"
