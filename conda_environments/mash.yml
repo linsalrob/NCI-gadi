@@ -1,0 +1,13 @@
+# mash: exported from /g/data/ob80/re3494/conda/mash on 2026-10-19 before deletion.
+# Requested conda packages are pinned to the versions that were installed;
+# the solver fills the rest. For an exact copy use mash.explicit.txt
+# (conda create -p <dir> --file mash.explicit.txt, then pip from this file),
+# or mash.lock.yml.
+# Rebuild: mamba env create -p /g/data/$PROJECT/$USER/conda/mash -f mash.yml
+name: mash
+channels:
+- bioconda
+- conda-forge
+- defaults
+dependencies:
+- mash=2.3

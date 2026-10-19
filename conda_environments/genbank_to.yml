@@ -1,0 +1,13 @@
+# genbank_to: exported from /g/data/ob80/re3494/conda/genbank_to on 2026-10-19 before deletion.
+# Requested conda packages are pinned to the versions that were installed;
+# the solver fills the rest. For an exact copy use genbank_to.explicit.txt
+# (conda create -p <dir> --file genbank_to.explicit.txt, then pip from this file),
+# or genbank_to.lock.yml.
+# Rebuild: mamba env create -p /g/data/$PROJECT/$USER/conda/genbank_to -f genbank_to.yml
+name: genbank_to
+channels:
+- bioconda
+- conda-forge
+- defaults
+dependencies:
+- genbank_to=0.42

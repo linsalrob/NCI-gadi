@@ -1,0 +1,16 @@
+# entrez: exported from /g/data/ob80/re3494/conda/entrez on 2026-10-19 before deletion.
+# Requested conda packages are pinned to the versions that were installed;
+# the solver fills the rest. For an exact copy use entrez.explicit.txt
+# (conda create -p <dir> --file entrez.explicit.txt, then pip from this file),
+# or entrez.lock.yml.
+# Rebuild: mamba env create -p /g/data/$PROJECT/$USER/conda/entrez -f entrez.yml
+name: entrez
+channels:
+- bioconda
+- conda-forge
+- defaults
+dependencies:
+- perl-io-socket-ssl=2.074
+- perl-net-ssleay=1.92
+- perl-lwp-protocol-https=6.10
+- entrez-direct=16.2

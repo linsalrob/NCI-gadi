@@ -1,0 +1,13 @@
+# pandoc: exported from /g/data/ob80/re3494/conda/pandoc on 2026-10-19 before deletion.
+# Requested conda packages are pinned to the versions that were installed;
+# the solver fills the rest. For an exact copy use pandoc.explicit.txt
+# (conda create -p <dir> --file pandoc.explicit.txt, then pip from this file),
+# or pandoc.lock.yml.
+# Rebuild: mamba env create -p /g/data/$PROJECT/$USER/conda/pandoc -f pandoc.yml
+name: pandoc
+channels:
+- bioconda
+- conda-forge
+- defaults
+dependencies:
+- pandoc=3.11

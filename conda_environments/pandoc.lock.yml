@@ -1,0 +1,8 @@
+name: null
+channels:
+  - bioconda
+  - conda-forge
+  - defaults
+dependencies:
+  - pandoc=3.11=ha770c72_0
+prefix: /g/data/ob80/re3494/conda/pandoc

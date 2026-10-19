@@ -1,0 +1,13 @@
+# foldseek: exported from /g/data/ob80/re3494/conda/foldseek on 2026-10-19 before deletion.
+# Requested conda packages are pinned to the versions that were installed;
+# the solver fills the rest. For an exact copy use foldseek.explicit.txt
+# (conda create -p <dir> --file foldseek.explicit.txt, then pip from this file),
+# or foldseek.lock.yml.
+# Rebuild: mamba env create -p /g/data/$PROJECT/$USER/conda/foldseek -f foldseek.yml
+name: foldseek
+channels:
+- bioconda
+- conda-forge
+- defaults
+dependencies:
+- foldseek=10.941cd33

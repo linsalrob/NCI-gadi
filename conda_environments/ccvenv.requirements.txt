@@ -1,0 +1,13 @@
+# venv /scratch/ob80/re3494/conda/ccvenv, deleted after this export (2026-10-19).
+# pyvenv.cfg: home = /g/data/ob80/re3494/conda/boltz2/bin
+# pyvenv.cfg: include-system-site-packages = false
+# pyvenv.cfg: version = 3.11.16
+# pyvenv.cfg: executable = /g/data/ob80/re3494/conda/boltz2/bin/python3.11
+# pyvenv.cfg: command = /g/data/ob80/re3494/conda/boltz2/bin/python -m venv /scratch/ob80/re3494/conda/ccvenv
+# Rebuild: <python> -m venv [--system-site-packages] <dir> && <dir>/bin/pip install -r ccvenv.requirements.txt
+biopython==1.88
+deepcoil==2.0.1
+numpy==2.4.6
+pandas==3.0.5
+python-dateutil==2.9.0.post0
+six==1.17.0

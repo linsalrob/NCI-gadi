@@ -1,0 +1,13 @@
+# buildenv: exported from /g/data/ob80/re3494/conda/buildenv on 2026-10-19 before deletion.
+# Requested conda packages are pinned to the versions that were installed;
+# the solver fills the rest. For an exact copy use buildenv.explicit.txt
+# (conda create -p <dir> --file buildenv.explicit.txt, then pip from this file),
+# or buildenv.lock.yml.
+# Rebuild: mamba env create -p /g/data/$PROJECT/$USER/conda/buildenv -f buildenv.yml
+name: buildenv
+channels:
+- bioconda
+- conda-forge
+- defaults
+dependencies:
+- python=3.12

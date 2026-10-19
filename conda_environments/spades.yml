@@ -1,0 +1,13 @@
+# spades: exported from /g/data/ob80/re3494/conda/spades on 2026-10-19 before deletion.
+# Requested conda packages are pinned to the versions that were installed;
+# the solver fills the rest. For an exact copy use spades.explicit.txt
+# (conda create -p <dir> --file spades.explicit.txt, then pip from this file),
+# or spades.lock.yml.
+# Rebuild: mamba env create -p /g/data/$PROJECT/$USER/conda/spades -f spades.yml
+name: spades
+channels:
+- bioconda
+- conda-forge
+- defaults
+dependencies:
+- spades=3.15.5

@@ -1,0 +1,29 @@
+# signalp6: exported from /g/data/ob80/re3494/conda/signalp6 on 2026-10-19 before deletion.
+# Requested conda packages are pinned to the versions that were installed;
+# the solver fills the rest. For an exact copy use signalp6.explicit.txt
+# (conda create -p <dir> --file signalp6.explicit.txt, then pip from this file),
+# or signalp6.lock.yml.
+# Rebuild: mamba env create -p /g/data/$PROJECT/$USER/conda/signalp6 -f signalp6.yml
+name: signalp6
+channels:
+- bioconda
+- conda-forge
+- defaults
+dependencies:
+- python=3.10
+- pip=26.2.1
+- pip:
+  - contourpy==1.3.2
+  - cycler==0.12.1
+  - fonttools==4.65.0
+  - kiwisolver==1.5.1
+  - matplotlib==3.10.9
+  - numpy==1.26.4
+  - pillow==12.3.0
+  - pyparsing==3.3.2
+  - python-dateutil==2.9.0.post0
+  - signalp6==6.0+h
+  - six==1.17.0
+  - torch==1.13.1+cpu
+  - tqdm==4.70.1
+  - typing-extensions==4.16.0

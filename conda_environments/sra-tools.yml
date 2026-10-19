@@ -1,0 +1,13 @@
+# sra-tools: exported from /g/data/ob80/re3494/conda/sra-tools on 2026-10-19 before deletion.
+# Requested conda packages are pinned to the versions that were installed;
+# the solver fills the rest. For an exact copy use sra-tools.explicit.txt
+# (conda create -p <dir> --file sra-tools.explicit.txt, then pip from this file),
+# or sra-tools.lock.yml.
+# Rebuild: mamba env create -p /g/data/$PROJECT/$USER/conda/sra-tools -f sra-tools.yml
+name: sra-tools
+channels:
+- bioconda
+- conda-forge
+- defaults
+dependencies:
+- sra-tools=3.0.6

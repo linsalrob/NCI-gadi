@@ -1,0 +1,13 @@
+# eggnog: exported from /g/data/ob80/re3494/conda/eggnog on 2026-10-19 before deletion.
+# Requested conda packages are pinned to the versions that were installed;
+# the solver fills the rest. For an exact copy use eggnog.explicit.txt
+# (conda create -p <dir> --file eggnog.explicit.txt, then pip from this file),
+# or eggnog.lock.yml.
+# Rebuild: mamba env create -p /g/data/$PROJECT/$USER/conda/eggnog -f eggnog.yml
+name: eggnog
+channels:
+- bioconda
+- conda-forge
+- defaults
+dependencies:
+- eggnog-mapper=2.1.15

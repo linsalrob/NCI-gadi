@@ -1,0 +1,13 @@
+# dssp: exported from /scratch/ob80/re3494/conda/dssp on 2026-10-19 before deletion.
+# Requested conda packages are pinned to the versions that were installed;
+# the solver fills the rest. For an exact copy use dssp.explicit.txt
+# (conda create -p <dir> --file dssp.explicit.txt, then pip from this file),
+# or dssp.lock.yml.
+# Rebuild: mamba env create -p /g/data/$PROJECT/$USER/conda/dssp -f dssp.yml
+name: dssp
+channels:
+- bioconda
+- conda-forge
+- defaults
+dependencies:
+- dssp=4.6.1

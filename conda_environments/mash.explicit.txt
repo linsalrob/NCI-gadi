@@ -1,0 +1,21 @@
+# This file may be used to create an environment using:
+# $ conda create --name <env> --file <this file>
+# platform: linux-64
+@EXPLICIT
+https://conda.anaconda.org/conda-forge/linux-64/_libgcc_mutex-0.1-conda_forge.tar.bz2#d7c89558ba9fa0495403155b64376d81
+https://conda.anaconda.org/conda-forge/linux-64/ca-certificates-2021.10.8-ha878542_0.tar.bz2#575611b8a84f45960e87722eeb51fa26
+https://conda.anaconda.org/conda-forge/linux-64/libgfortran5-12.1.0-hdcd56e2_16.tar.bz2#b02605b875559ff99f04351fd5040760
+https://conda.anaconda.org/conda-forge/linux-64/libstdcxx-ng-12.1.0-ha89aaad_16.tar.bz2#6f5ba041a41eb102a1027d9e68731be7
+https://conda.anaconda.org/conda-forge/linux-64/libgfortran-ng-12.1.0-h69a702a_16.tar.bz2#6bf15e29a20f614b18ae89368260d0a2
+https://conda.anaconda.org/conda-forge/linux-64/libgomp-12.1.0-h8d9b700_16.tar.bz2#f013cf7749536ce43d82afbffdf499ab
+https://conda.anaconda.org/conda-forge/linux-64/_openmp_mutex-4.5-2_gnu.tar.bz2#73aaf86a425cc6e73fcf236a5a46396d
+https://conda.anaconda.org/conda-forge/linux-64/libgcc-ng-12.1.0-h8d9b700_16.tar.bz2#4f05bc9844f7c101e6e147dab3c88d5c
+https://conda.anaconda.org/conda-forge/linux-64/libopenblas-0.3.20-pthreads_h78a6416_0.tar.bz2#9b6d0781953c9e353faee494336cc229
+https://conda.anaconda.org/conda-forge/linux-64/libzlib-1.2.11-h166bdaf_1014.tar.bz2#757138ba3ddc6777b82e91d9ff62e7b9
+https://conda.anaconda.org/conda-forge/linux-64/openssl-1.1.1o-h166bdaf_0.tar.bz2#6172048796b123e542945d998f5150b7
+https://conda.anaconda.org/conda-forge/linux-64/capnproto-0.9.1-h780b84a_5.tar.bz2#27eb95be0d6b64bb969252f2ea83c9c6
+https://conda.anaconda.org/conda-forge/linux-64/libblas-3.9.0-14_linux64_openblas.tar.bz2#fb31fbbde682414550bbe15e3964420f
+https://conda.anaconda.org/conda-forge/linux-64/zlib-1.2.11-h166bdaf_1014.tar.bz2#def3b82d1a03aa695bb38ac1dd072ff2
+https://conda.anaconda.org/conda-forge/linux-64/libcblas-3.9.0-14_linux64_openblas.tar.bz2#1b41ea4c32014d878e84de4e5690df7a
+https://conda.anaconda.org/conda-forge/linux-64/gsl-2.7-he838d99_0.tar.bz2#fec079ba39c9cca093bf4c00001825de
+https://conda.anaconda.org/bioconda/linux-64/mash-2.3-ha9a2dd8_3.tar.bz2#272e9719f69a9846e49f8292b7f4c965

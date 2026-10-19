@@ -1,0 +1,5 @@
+# This file may be used to create an environment using:
+# $ conda create --name <env> --file <this file>
+# platform: linux-64
+@EXPLICIT
+https://conda.anaconda.org/conda-forge/linux-64/pandoc-3.11-ha770c72_0.conda#2c71f77db75fa5e9dd64abb706c66788
