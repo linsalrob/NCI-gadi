@@ -122,12 +122,17 @@ personalise() {
 tmp=$(mktemp -d)
 trap 'rm -rf "$tmp"' EXIT
 
+install_header() {
+    printf '<!-- INSTALLED FILE, BUILT FROM agents/ — DO NOT EDIT DIRECTLY (people or agents).\n'
+    printf '     Source: %s in linsalrob/NCI-gadi.\n' "$1"
+    printf '     agents/build.sh overwrites this file, so direct edits are lost.\n'
+    printf '     Edit the source, commit, push, then rerun agents/build.sh. -->\n\n'
+}
+
 build_combined() {
     local overlay="$1" out="$2"
     {
-        printf '<!-- INSTALLED FILE — do not edit directly.\n'
-        printf '     Source: agents/AGENTS.md + agents/%s in linsalrob/NCI-gadi.\n' "$overlay"
-        printf '     Edit those, commit, push, then rerun agents/build.sh. -->\n\n'
+        install_header "agents/AGENTS.md + agents/$overlay"
         personalise AGENTS.md
         printf '\n\n'
         personalise "$overlay"
@@ -137,7 +142,7 @@ build_combined() {
 
 build_combined AGENTS.codex.md  "$tmp/AGENTS.codex.md"
 build_combined AGENTS.claude.md "$tmp/CLAUDE.md"
-{ personalise AGENTS.md; handoff_note; } > "$tmp/AGENTS.md"
+{ install_header agents/AGENTS.md; personalise AGENTS.md; handoff_note; } > "$tmp/AGENTS.md"
 
 install_file "$tmp/AGENTS.codex.md" ~/.codex/AGENTS.md
 install_file "$tmp/CLAUDE.md"       ~/.claude/CLAUDE.md

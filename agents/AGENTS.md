@@ -13,8 +13,14 @@ instructions apply when no more specific project or directory guidance overrides
   one agent only.
 - `<AGENT>` below (and in the `ask-chatgpt` / `ask-claude` skills) is a placeholder for the
   agent running the session; the overlay says what it is.
-- Do not edit the installed copies. Edit the sources, commit, push, and rerun
-  `agents/build.sh`.
+- **The installed agent files are build outputs. Never edit them directly** — this applies
+  to agents as much as to people. `~/.codex/AGENTS.md`, `~/.claude/CLAUDE.md`,
+  `~/.claude/AGENTS.md` and the installed `skills/*/SKILL.md` are all generated from
+  `agents/` and are overwritten on the next `build.sh` run (including the automatic run
+  after every `git pull`), so a direct edit is silently lost. When asked to change global
+  agent instructions, edit `agents/AGENTS.md` (shared), `agents/AGENTS.claude.md` or
+  `agents/AGENTS.codex.md` (one agent only), or `agents/skills/`, then commit, push, and
+  rerun `agents/build.sh`.
 
 ## Instruction precedence
 
@@ -748,3 +754,74 @@ A task is complete when:
   - where it changed;
   - what validation was run;
   - any remaining limitations or follow-up work.
+
+## Protein identity: never key on a name
+
+**Never use protein or gene names as primary keys or unique identifiers.** Names
+are non-unique and collide across phages, species, annotations and projects.
+Canonical identity must be **sequence-based** — a stable digest of the exact
+amino-acid sequence — with names and accessions stored as metadata. Any
+comparison, cache, result join or benchmark lookup must resolve by sequence
+digest first.
+
+This is not hypothetical. Three live collisions in `phage_interactions`, all
+found by the audit that this rule requires:
+
+- **Gp5** — T7 DNA polymerase (704 aa, PDB 1T7P) in the curated control set, and
+  an unrelated 61-aa peptide in a collaborator's blind set.
+- **MciZ** — `MciZ_4U39` named a *fictitious* 40-mer (12% identity to L8EBJ9)
+  for a month. It scored 0.22, was written up as "AF3 cannot recover a solved
+  complex", retracted, and then **re-cited five weeks later** because the name
+  still looked right. The real peptide scores 0.92-0.93.
+- **p56** — two different 56-aa uracil-DNA glycosylase inhibitors, from
+  different phages, both called `p56`, inside the same 24-pair benchmark.
+
+### Convention
+
+```
+seqkey = "sq1_" + sha256(normalised_sequence).hexdigest()[:16]
+normalised = uppercase, whitespace removed, one trailing "*" removed
+```
+
+`sq1_` is a version prefix so the scheme can change without silently
+reinterpreting stored keys. Gaps (`-`, `.`) are rejected, not stripped: a gapped
+string is an alignment row, not a sequence, and accepting one would key an
+artefact as a protein. Ambiguity codes (X/B/Z/J/U/O) are kept, because dropping
+them would merge distinct sequences.
+
+Reference implementation: `scripts/seqkey.py` (`seqkey()`, `Registry`), with
+`build` and `check` subcommands.
+
+### Construct variants and truncations
+
+They need no special handling, and that is the point: a truncation is a
+different sequence, so it gets a different key automatically. MciZ's partner is
+`sq1_c186ecdbe5a6…` (full-length FtsZ P17865, 382 aa) or `sq1_cbab77cd64f3…`
+(the 4U39 crystal construct, 305 aa) — distinct keys, impossible to conflate.
+Record the construct as metadata for humans; never rely on it for identity.
+
+### Mapping existing tables
+
+Existing results are keyed by name. Do **not** rewrite them in place. Build a
+registry (`seqkey.py build`) mapping every name in every FASTA to its key, join
+through it, and treat any name resolving to more than one key as a **hard
+error** that must be resolved by hand before the table is used.
+
+### The guard
+
+Two asymmetric failure modes:
+
+- **one name -> several keys** is a hazard: a lookup can return the wrong
+  molecule. `Registry.check()` is **fatal** on this.
+- **one key -> several names** is mere aliasing (`ftsZ_P0A9A6` /
+  `ftsZ|P0A9A6|FTSZ_ECOLI`). Reported, never fatal.
+
+`Registry.add()` additionally raises `SequenceKeyError` if one key is ever
+reached by two different sequences, so a digest collision can never pass
+silently.
+
+### Standing requirement
+
+A sequence literal pasted beside an accession must be **verified against that
+accession**, not trusted. The MciZ comment cited the right accession and the
+wrong string, and nothing compared them for a month.

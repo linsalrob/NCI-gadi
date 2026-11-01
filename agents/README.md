@@ -60,7 +60,9 @@ An existing file that `build.sh` did not write, or that has been edited since, i
 
 ## Updating
 
-Edit the files here, not the installed copies, then run `build.sh` again. After the first
+Edit the files here, not the installed copies, then run `build.sh` again. The installed
+files carry a header saying they are built from `agents/`; anything edited in them directly,
+whether by a person or an agent, is lost on the next build. After the first
 run, `git pull` reinstalls automatically through the post-merge hook.
 
 Files are copied, not linked, so the installed config does not depend on `/g/data` being
