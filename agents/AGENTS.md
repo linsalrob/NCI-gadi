@@ -867,7 +867,7 @@ description is not a join key.
   plain `hashfasta` command. The three give identical decompressed output; only the gzip
   bytes differ. If they are missing or out of date, get the current release from
   <https://github.com/linsalrob/HashFASTA/releases> (check with
-  `gh api repos/linsalrob/HashFASTA/releases/latest --jq .tag_name`). Releases carry
+  `gh release view -R linsalrob/HashFASTA --json tagName --jq .tagName`). Releases carry
   `hashfasta-X.Y.Z-linux-x86_64.tar.gz`; verify it against `SHA256SUMS` before installing.
   A release can be published before its binaries are attached, in which case use the newest
   release that has them. `pip install hashfasta` also works but is slower and uses more
