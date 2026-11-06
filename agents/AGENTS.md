@@ -318,6 +318,17 @@ through GitHub.
   the ColabFold composition (UniRef30 + environmental), not whichever protein database is
   conveniently to hand, and never treat pLDDT/ipTM as evidence that an MSA was adequate.
 
+### Tool preferences
+
+- **Avoid the BBTools suite** (BBMap, BBDuk, BBNorm, BBMerge, Tadpole, `reformat.sh`,
+  `clumpify.sh`, and the rest of the `*.sh` wrappers). They are written in Java and tend to
+  be very memory hungry, which makes them a poor fit for packed or shared HPC allocations.
+  Prefer other established tools for the same job, for example fastp for trimming and
+  adapter removal, minimap2 or bowtie2/bwa-mem2 for read mapping, seqkit for format
+  conversion and subsampling, and KMC or Jellyfish for k-mer counting. Use a BBTools
+  program only when no reasonable alternative exists, and state why in the code or the
+  final report.
+
 ## Dependencies
 
 - Prefer existing dependencies and standard-library functionality.
@@ -523,12 +534,22 @@ authentication could not be verified from the sandbox; do not conclude that the 
 credentials are invalid. Retry outside the restricted sandbox or request network permission
 rather than asking the user to reauthenticate immediately.
 
-The GraphQL approval includes reading pull-request review threads and resolving a thread
-only after its actionable feedback has actually been addressed and the user has asked for
-outstanding review comments to be resolved. Do not resolve informational, disputed,
-ambiguous, or unaddressed threads. Read-only Actions API calls must remain scoped to the
-repository under discussion. Posting `@<agent> review` (the overlay names the agent) is routine only for requesting a
-re-review of a pull request the user asked to monitor.
+The GraphQL approval includes reading pull-request review threads, replying to them, and
+resolving a thread once its actionable feedback has been addressed (see below). Read-only
+Actions API calls must remain scoped to the repository under discussion. Posting
+`@<agent> review` (the overlay names the agent) is routine only for requesting a re-review
+of a pull request the user asked to monitor.
+
+**Whenever the agent addresses a GitHub review comment or review thread, it marks that
+thread as resolved**, without waiting to be asked. This applies to comments from people and
+from review bots (e.g. Codex). Once the change that addresses it is pushed:
+
+1. reply on the thread, saying what changed and naming the commit;
+2. resolve the thread (GraphQL `resolveReviewThread`).
+
+Do not leave addressed threads open for the user to close. Do not resolve informational,
+disputed, ambiguous, or unaddressed threads, or threads where the agent declined the
+suggestion: reply with the reasoning and leave them for the user.
 
 ### Node, npm, and npx
 
@@ -789,7 +810,8 @@ string is an alignment row, not a sequence, and accepting one would key an
 artefact as a protein. Ambiguity codes (X/B/Z/J/U/O) are kept, because dropping
 them would merge distinct sequences.
 
-Reference implementation: `scripts/seqkey.py` (`seqkey()`, `Registry`), with
+Reference implementation: `projects/phage_interactions/scripts/seqkey.py` in
+`linsalrob/agent-handoffs` (added in agent-handoffs#39; `seqkey()`, `Registry`), with
 `build` and `check` subcommands.
 
 ### Construct variants and truncations
@@ -825,3 +847,51 @@ silently.
 A sequence literal pasted beside an accession must be **verified against that
 accession**, not trusted. The MciZ comment cited the right accession and the
 wrong string, and nothing compared them for a month.
+
+## Hash standalone FASTA inputs with HashFASTA before analysis
+
+FASTA identifiers are not unique: many phage proteins are called `gp5`, many contigs
+`node_1`, and merging files from different sources produces name collisions that silently
+corrupt downstream joins, lookups, and tables. To prevent this, **hash standalone FASTA
+inputs before analysis**: run each downloaded FASTA file through HashFASTA before any
+analysis touches it, and use the hashed output, not the original.
+
+**If a FASTA is paired with a GFF, GTF, or other file that joins on its identifiers, do not
+hash it alone.** Keep the pair unchanged unless every linked file is remapped together and
+the mapping is preserved. Hashing only the FASTA breaks the join: PADLOC, for example,
+aborts when protein IDs do not match the GFF, and the original name kept in the header
+description is not a join key.
+
+- On Gadi the statically linked binaries are installed in `~/bin` (on `PATH`, and visible
+  from compute nodes) as `hashfasta-rust`, `hashfasta-c` and `hashfasta-cpp`; there is no
+  plain `hashfasta` command. The three give identical decompressed output; only the gzip
+  bytes differ. If they are missing or out of date, get the current release from
+  <https://github.com/linsalrob/HashFASTA/releases> (check with
+  `gh api repos/linsalrob/HashFASTA/releases/latest --jq .tag_name`). Releases carry
+  `hashfasta-X.Y.Z-linux-x86_64.tar.gz`; verify it against `SHA256SUMS` before installing.
+  A release can be published before its binaries are attached, in which case use the newest
+  release that has them. `pip install hashfasta` also works but is slower and uses more
+  memory.
+- Usage: `hashfasta-rust INPUT [-o OUTPUT] [--threads N]`. `hashfasta-rust x.fna.gz` writes
+  `x.hash.fasta.gz` beside the input. Input may be plain, gzip, bzip2 or xz; output is always
+  gzip. On a compute node, size `--threads` from the job's `ncpus`.
+- Each record becomes `>sha256_<hash of the sequence> [<original definition line>]`, so the
+  original name stays recoverable from the header. Keep the downloaded original alongside
+  the hashed file; do not delete it.
+- The `sha256_` key is **not** the `sq1_` key from "Protein identity" above: HashFASTA hashes
+  the full SHA-256 and keeps a trailing `*`, whereas `sq1_` truncates to 16 hex digits and
+  drops it. Never compare or join one against the other directly; recompute from the
+  sequence.
+- Identical sequences get identical identifiers, and duplicate records are kept.
+  Deduplicate deliberately if a tool requires unique IDs; do not assume that two records
+  with the same key came from the same source.
+- Sequences are uppercased. Lowercase soft-masking (e.g. repeat-masked genomes) is lost, so
+  run any step that depends on it on the original, and say so.
+- Some tools limit identifier length (the key is 71 characters). If a tool rejects or
+  truncates them, map to short IDs with an explicit, saved lookup table rather than
+  reverting to the original names.
+- This applies to sequences downloaded as analysis inputs (NCBI, ENA, collaborator files,
+  and the like). It does not apply to prebuilt reference databases used in place, such as
+  the ColabFold databases under `if89`.
+- Record the HashFASTA release used in the final report (from 0.3.0, `--version` prints
+  it).

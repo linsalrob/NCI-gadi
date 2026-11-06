@@ -32,9 +32,7 @@ python3.11 ~/.codex/plugins/cache/openai-curated-remote/github/*/skills/gh-addre
 These paths exist only under Codex's own home directory. Do not assume an equivalent script
 exists elsewhere unless you have located it.
 
-If the user has asked Codex to address PR review feedback and a review thread has been
-addressed by the pushed change, Codex may mark that specific thread as resolved. Do not
-resolve informational, disputed, ambiguous, or unaddressed threads.
+Resolving addressed review threads follows the shared base's "GitHub CLI" section.
 
 ### Tool use
 
